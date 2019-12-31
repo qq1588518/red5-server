@@ -98,6 +98,46 @@
             <name>Sonatype Releases</name>
             <url>http://oss.sonatype.org/content/repositories/releases</url>
         </repository>
+        <repository>
+            <id>Red5</id>
+            <url>http://red5.googlecode.com/svn/repository</url>
+        </repository>
+        <repository>
+            <id>Xuggle</id>
+            <url>http://xuggle.googlecode.com/svn/trunk/repo/share/java/</url>
+        </repository>
+        <repository>
+            <id>repo1.maven.org</id>
+            <url>http://repo1.maven.org/maven2</url>
+        </repository>
+        <repository>
+            <id>springsource-repo</id>
+            <name>SpringSource Repository</name>
+            <url>http://repo.springsource.org/release</url>
+        </repository>
+        <repository>
+            <id>maven2-repository.dev.java.net</id>
+            <url>http://download.java.net/maven/2</url>
+        </repository>
+        <repository>
+            <id>opensymphony-releases</id>
+            <name>Opensymphony Releases</name>
+            <url>https://oss.sonatype.org/content/repositories/opensymphony-releases</url>
+        </repository>
+        <repository>
+            <id>jboss-public-repository-group</id>
+            <name>JBoss Public Maven Repository Group</name>
+            <url>https://repository.jboss.org/nexus/content/groups/public-jboss</url>
+            <layout>default</layout>
+            <releases>
+                <enabled>true</enabled>
+                <updatePolicy>never</updatePolicy>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+                <updatePolicy>never</updatePolicy>
+            </snapshots>
+        </repository>
     </repositories>
     <build>
         <defaultGoal>install</defaultGoal>
@@ -361,6 +401,16 @@
                 <version>${isoparser.version}</version>
             </dependency>
             <dependency>
+                <groupId>xuggle</groupId>
+                <artifactId>xuggle-xuggler</artifactId>
+                <version>5.4</version>
+            </dependency>
+            <dependency>
+                <groupId>xuggle</groupId>
+                <artifactId>xuggle-utils</artifactId>
+                <version>1.22</version>
+            </dependency>
+        <dependency>
                 <groupId>org.apache.mina</groupId>
                 <artifactId>mina-core</artifactId>
                 <version>${mina.version}</version>

@@ -83,6 +83,8 @@
     <orderEntry type="library" scope="TEST" name="Maven: org.hamcrest:hamcrest-junit:2.0.0.0" level="project" />
     <orderEntry type="library" scope="TEST" name="Maven: org.hamcrest:java-hamcrest:2.0.0.0" level="project" />
     <orderEntry type="library" name="Maven: org.mp4parser:isoparser:1.9.39" level="project" />
+    <orderEntry type="library" name="Maven: xuggle:xuggle-xuggler:5.4" level="project" />
+    <orderEntry type="library" name="Maven: xuggle:xuggle-utils:1.22" level="project" />
     <orderEntry type="library" name="Maven: org.apache.mina:mina-core:2.0.21" level="project" />
     <orderEntry type="library" scope="PROVIDED" name="Maven: org.apache.tomcat:tomcat-servlet-api:8.5.45" level="project" />
     <orderEntry type="library" scope="PROVIDED" name="Maven: org.red5:tomcatplugin:2.2.2" level="project" />

@@ -1,5 +1,5 @@
 /*
- * RED5 Open Source Flash Server - https://github.com/red5 Copyright 2006-2018 by respective authors (see below). All rights reserved. Licensed under the Apache License, Version
+ * RED5 Open Source Flash Server - https://github.com/red5 Copyright 2006-2015 by respective authors (see below). All rights reserved. Licensed under the Apache License, Version
  * 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless
  * required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
  * either express or implied. See the License for the specific language governing permissions and limitations under the License.
@@ -7,11 +7,15 @@
 
 package org.red5.net.websocket;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.URI;
-import java.security.Principal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -24,31 +28,49 @@ import java.util.concurrent.Future;
 import javax.websocket.ClientEndpoint;
 import javax.websocket.ClientEndpointConfig;
 import javax.websocket.ContainerProvider;
-import javax.websocket.DeploymentException;
 import javax.websocket.Endpoint;
 import javax.websocket.EndpointConfig;
-import javax.websocket.Extension;
 import javax.websocket.OnMessage;
 import javax.websocket.Session;
 import javax.websocket.WebSocketContainer;
 
-import org.apache.catalina.LifecycleException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.mina.core.buffer.IoBuffer;
 import org.apache.mina.core.filterchain.IoFilter.NextFilter;
+import org.apache.mina.core.filterchain.IoFilterChain;
+import org.apache.mina.core.future.CloseFuture;
+import org.apache.mina.core.future.ConnectFuture;
+import org.apache.mina.core.future.ReadFuture;
 import org.apache.mina.core.future.WriteFuture;
+import org.apache.mina.core.service.IoHandler;
+import org.apache.mina.core.service.IoHandlerAdapter;
+import org.apache.mina.core.service.IoService;
+import org.apache.mina.core.service.TransportMetadata;
+import org.apache.mina.core.session.IdleStatus;
 import org.apache.mina.core.session.IoSession;
+import org.apache.mina.core.session.IoSessionConfig;
+import org.apache.mina.core.write.WriteRequest;
+import org.apache.mina.core.write.WriteRequestQueue;
+import org.apache.mina.filter.codec.ProtocolCodecFilter;
 import org.apache.mina.filter.codec.ProtocolDecoderOutput;
 import org.apache.mina.filter.codec.ProtocolEncoderOutput;
-import org.apache.tomcat.websocket.WsRemoteEndpointImplBase;
-import org.apache.tomcat.websocket.WsSession;
-import org.apache.tomcat.websocket.WsWebSocketContainer;
+import org.apache.mina.transport.socket.SocketConnector;
+import org.apache.mina.transport.socket.SocketSessionConfig;
+import org.apache.mina.transport.socket.nio.NioSocketAcceptor;
+import org.apache.mina.transport.socket.nio.NioSocketConnector;
 import org.junit.Test;
+import org.red5.net.websocket.codec.WebSocketCodecFactory;
+import org.red5.net.websocket.codec.WebSocketDecoder;
+import org.red5.net.websocket.codec.WebSocketEncoder;
+import org.red5.net.websocket.model.ConnectionType;
+import org.red5.net.websocket.model.HandshakeRequest;
+import org.red5.net.websocket.model.MessageType;
+import org.red5.net.websocket.model.Packet;
+import org.red5.net.websocket.model.WSMessage;
 import org.red5.server.adapter.MultiThreadedApplicationAdapter;
 import org.red5.server.api.scope.IScope;
 import org.red5.server.plugin.PluginRegistry;
 import org.red5.server.scope.GlobalScope;
-import org.red5.server.tomcat.EmbeddedTomcat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,14 +79,12 @@ import org.slf4j.LoggerFactory;
  * 
  * @author Paul Gregoire (mondain@gmail.com)
  */
+@SuppressWarnings("deprecation")
 public class WebSocketServerTest {
 
     protected static Logger log = LoggerFactory.getLogger(WebSocketServerTest.class);
 
-    @SuppressWarnings("unused")
     private static Object writtenResult;
-
-    private static WebSocketScope scope;
 
     /*
      * Test data from the rfc <pre> A single-frame unmasked text message (contains "Hello") 0x81 0x05 0x48 0x65 0x6c 0x6c 0x6f A single-frame masked text message (contains "Hello")
@@ -84,7 +104,7 @@ public class WebSocketServerTest {
                 log.debug("Server thread run");
                 try {
                     WSServer.main(null);
-                } catch (Exception e) {
+                } catch (IOException e) {
                     log.error("Error in server thread", e);
                 }
                 log.debug("Server thread exit");
@@ -153,43 +173,40 @@ public class WebSocketServerTest {
     //		log.info("-------------------------------------------------------test66 exit");
     //	}
 
-    @SuppressWarnings("unused")
     @Test
     public void testMasked() throws Throwable {
         log.info("testMasked enter");
         // masked
         IoBuffer in = IoBuffer.wrap(new byte[] { (byte) 0x81, (byte) 0x85, (byte) 0x37, (byte) 0xfa, (byte) 0x21, (byte) 0x3d, (byte) 0x7f, (byte) 0x9f, (byte) 0x4d, (byte) 0x51, (byte) 0x58 });
         // create session and conn
-        DummySession sess = new DummySession();
-        WebSocketConnection conn = new WebSocketConnection(scope, sess);
-        //session.setAttribute(Constants.CONNECTION, conn);
+        DummySession session = new DummySession();
+        WebSocketConnection conn = new WebSocketConnection(session);
+        session.setAttribute(Constants.CONNECTION, conn);
         // decode
-        //        DummyDecoder decoder = new DummyDecoder();
-        //        decoder.dummyDecode(session, in, new DummyOutput());
-        //        assertTrue(((WSMessage) writtenResult).getMessageType() == WSMessage.MessageType.TEXT);
-        //        assertEquals("Hello", ((WSMessage) writtenResult).getMessageAsString());
-        //        log.info("testMasked exit");
+        DummyDecoder decoder = new DummyDecoder();
+        decoder.dummyDecode(session, in, new DummyOutput());
+        assertTrue(((WSMessage) writtenResult).getMessageType() == MessageType.TEXT);
+        assertEquals("Hello", ((WSMessage) writtenResult).getMessageAsString());
+        log.info("testMasked exit");
     }
 
-    @SuppressWarnings("unused")
     @Test
     public void testUnmasked() throws Throwable {
         log.info("testUnmasked enter");
         // unmasked
         IoBuffer in = IoBuffer.wrap(new byte[] { (byte) 0x81, (byte) 0x05, (byte) 0x48, (byte) 0x65, (byte) 0x6c, (byte) 0x6c, (byte) 0x6f });
         // create session and conn
-        DummySession sess = new DummySession();
-        WebSocketConnection conn = new WebSocketConnection(scope, sess);
-        //session.setAttribute(Constants.CONNECTION, conn);
+        DummySession session = new DummySession();
+        WebSocketConnection conn = new WebSocketConnection(session);
+        session.setAttribute(Constants.CONNECTION, conn);
         // decode
-        //        DummyDecoder decoder = new DummyDecoder();
-        //        decoder.dummyDecode(session, in, new DummyOutput());
-        //        assertTrue(((WSMessage) writtenResult).getMessageType() == WSMessage.MessageType.TEXT);
-        //        assertEquals("Hello", ((WSMessage) writtenResult).getMessageAsString());
-        //        log.info("testUnmasked exit");
+        DummyDecoder decoder = new DummyDecoder();
+        decoder.dummyDecode(session, in, new DummyOutput());
+        assertTrue(((WSMessage) writtenResult).getMessageType() == MessageType.TEXT);
+        assertEquals("Hello", ((WSMessage) writtenResult).getMessageAsString());
+        log.info("testUnmasked exit");
     }
 
-    @SuppressWarnings("unused")
     @Test
     public void testFragmented() throws Throwable {
         log.info("testFragmented enter");
@@ -197,100 +214,100 @@ public class WebSocketServerTest {
         byte[] part1 = new byte[] { (byte) 0x01, (byte) 0x03, (byte) 0x48, (byte) 0x65, (byte) 0x6c };
         byte[] part2 = new byte[] { (byte) 0x80, (byte) 0x02, (byte) 0x6c, (byte) 0x6f };
         // create session and conn
-        DummySession sess = new DummySession();
-        WebSocketConnection conn = new WebSocketConnection(scope, sess);
-        //session.setAttribute(Constants.CONNECTION, conn);
+        DummySession session = new DummySession();
+        WebSocketConnection conn = new WebSocketConnection(session);
+        session.setAttribute(Constants.CONNECTION, conn);
         // decode
-        //        DummyDecoder decoder = new DummyDecoder();
-        //        DummyOutput out = new DummyOutput();
-        //        // create io buffer
-        //        IoBuffer in = IoBuffer.allocate(5, false);
-        //        // add part 1
-        //        in.put(part1);
-        //        in.flip();
-        //        // decode with first fragment
-        //        decoder.dummyDecode(session, in, out);
-        //        // add part 2
-        //        in = IoBuffer.allocate(4, false);
-        //        in.put(part2);
-        //        in.flip();
-        //        // decode with second fragment
-        //        decoder.dummyDecode(session, in, out);
-        //        // check result
-        //        assertTrue(((WSMessage) writtenResult).getMessageType() == WSMessage.MessageType.TEXT);
-        //        assertEquals("Hello", ((WSMessage) writtenResult).getMessageAsString());
+        DummyDecoder decoder = new DummyDecoder();
+        DummyOutput out = new DummyOutput();
+        // create io buffer
+        IoBuffer in = IoBuffer.allocate(5, false);
+        // add part 1
+        in.put(part1);
+        in.flip();
+        // decode with first fragment
+        decoder.dummyDecode(session, in, out);
+        // add part 2
+        in = IoBuffer.allocate(4, false);
+        in.put(part2);
+        in.flip();
+        // decode with second fragment
+        decoder.dummyDecode(session, in, out);
+        // check result
+        assertTrue(((WSMessage) writtenResult).getMessageType() == MessageType.TEXT);
+        assertEquals("Hello", ((WSMessage) writtenResult).getMessageAsString());
         log.info("testFragmented exit");
     }
 
-    //    @Test
-    //    public void testUnmaskedPing() throws Throwable {
-    //        log.info("testUnmaskedPing enter");
-    //        // unmasked ping
-    //        IoBuffer in = IoBuffer.wrap(new byte[] { (byte) 0x89, (byte) 0x05, (byte) 0x48, (byte) 0x65, (byte) 0x6c, (byte) 0x6c, (byte) 0x6f });
-    //        // create session and conn
-    //        DummySession session = new DummySession();
-    //        WebSocketConnection conn = new WebSocketConnection(session);
-    //        session.setAttribute(Constants.CONNECTION, conn);
-    //        // decode
-    //        DummyDecoder decoder = new DummyDecoder();
-    //        decoder.dummyDecode(session, in, new DummyOutput());
-    //        assertTrue(((WSMessage) writtenResult).getMessageType() == MessageType.PING);
-    //        assertEquals("Hello", ((WSMessage) writtenResult).getMessageAsString());
-    //        log.info("testUnmaskedPing exit");
-    //    }
+    @Test
+    public void testUnmaskedPing() throws Throwable {
+        log.info("testUnmaskedPing enter");
+        // unmasked ping
+        IoBuffer in = IoBuffer.wrap(new byte[] { (byte) 0x89, (byte) 0x05, (byte) 0x48, (byte) 0x65, (byte) 0x6c, (byte) 0x6c, (byte) 0x6f });
+        // create session and conn
+        DummySession session = new DummySession();
+        WebSocketConnection conn = new WebSocketConnection(session);
+        session.setAttribute(Constants.CONNECTION, conn);
+        // decode
+        DummyDecoder decoder = new DummyDecoder();
+        decoder.dummyDecode(session, in, new DummyOutput());
+        assertTrue(((WSMessage) writtenResult).getMessageType() == MessageType.PING);
+        assertEquals("Hello", ((WSMessage) writtenResult).getMessageAsString());
+        log.info("testUnmaskedPing exit");
+    }
 
-    //    @Test
-    //    public void testMaskedPong() throws Throwable {
-    //        log.info("testMaskedPong enter");
-    //        // masked pong
-    //        IoBuffer in = IoBuffer.wrap(new byte[] { (byte) 0x8a, (byte) 0x85, (byte) 0x37, (byte) 0xfa, (byte) 0x21, (byte) 0x3d, (byte) 0x7f, (byte) 0x9f, (byte) 0x4d, (byte) 0x51, (byte) 0x58 });
-    //        // create session and conn
-    //        DummySession session = new DummySession();
-    //        WebSocketConnection conn = new WebSocketConnection(session);
-    //        session.setAttribute(Constants.CONNECTION, conn);
-    //        // decode
-    //        DummyDecoder decoder = new DummyDecoder();
-    //        decoder.dummyDecode(session, in, new DummyOutput());
-    //        assertTrue(((WSMessage) writtenResult).getMessageType() == MessageType.PONG);
-    //        assertEquals("Hello", ((WSMessage) writtenResult).getMessageAsString());
-    //        log.info("testMaskedPong exit");
-    //    }
+    @Test
+    public void testMaskedPong() throws Throwable {
+        log.info("testMaskedPong enter");
+        // masked pong
+        IoBuffer in = IoBuffer.wrap(new byte[] { (byte) 0x8a, (byte) 0x85, (byte) 0x37, (byte) 0xfa, (byte) 0x21, (byte) 0x3d, (byte) 0x7f, (byte) 0x9f, (byte) 0x4d, (byte) 0x51, (byte) 0x58 });
+        // create session and conn
+        DummySession session = new DummySession();
+        WebSocketConnection conn = new WebSocketConnection(session);
+        session.setAttribute(Constants.CONNECTION, conn);
+        // decode
+        DummyDecoder decoder = new DummyDecoder();
+        decoder.dummyDecode(session, in, new DummyOutput());
+        assertTrue(((WSMessage) writtenResult).getMessageType() == MessageType.PONG);
+        assertEquals("Hello", ((WSMessage) writtenResult).getMessageAsString());
+        log.info("testMaskedPong exit");
+    }
 
-    //    @Test
-    //    public void testUnmaskedRoundTrip() throws Throwable {
-    //        log.info("testUnmaskedRoundTrip enter");
-    //        // create session and conn
-    //        DummySession session = new DummySession();
-    //        WebSocketConnection conn = new WebSocketConnection(session);
-    //        session.setAttribute(Constants.CONNECTION, conn);
-    //        // encode
-    //        DummyEncoder encoder = new DummyEncoder();
-    //        encoder.dummyEncode(session, Packet.build("Hello".getBytes(), WSMessage.MessageType.TEXT), new DummyOutput());
-    //        // decode
-    //        DummyDecoder decoder = new DummyDecoder();
-    //        decoder.dummyDecode(session, (IoBuffer) writtenResult, new DummyOutput());
-    //        assertTrue(((WSMessage) writtenResult).getMessageType() == WSMessage.MessageType.TEXT);
-    //        assertEquals("Hello", ((WSMessage) writtenResult).getMessageAsString());
-    //        log.info("testUnmaskedRoundTrip exit");
-    //    }
+    @Test
+    public void testUnmaskedRoundTrip() throws Throwable {
+        log.info("testUnmaskedRoundTrip enter");
+        // create session and conn
+        DummySession session = new DummySession();
+        WebSocketConnection conn = new WebSocketConnection(session);
+        session.setAttribute(Constants.CONNECTION, conn);
+        // encode
+        DummyEncoder encoder = new DummyEncoder();
+        encoder.dummyEncode(session, Packet.build("Hello".getBytes(), MessageType.TEXT), new DummyOutput());
+        // decode
+        DummyDecoder decoder = new DummyDecoder();
+        decoder.dummyDecode(session, (IoBuffer) writtenResult, new DummyOutput());
+        assertTrue(((WSMessage) writtenResult).getMessageType() == MessageType.TEXT);
+        assertEquals("Hello", ((WSMessage) writtenResult).getMessageAsString());
+        log.info("testUnmaskedRoundTrip exit");
+    }
 
-    //    @Test
-    //    public void testUnmaskedPingRoundTrip() throws Throwable {
-    //        log.info("testUnmaskedPingRoundTrip enter");
-    //        // create session and conn
-    //        DummySession session = new DummySession();
-    //        WebSocketConnection conn = new WebSocketConnection(session);
-    //        session.setAttribute(Constants.CONNECTION, conn);
-    //        // encode
-    //        DummyEncoder encoder = new DummyEncoder();
-    //        encoder.dummyEncode(session, Packet.build("Hello".getBytes(), MessageType.PING), new DummyOutput());
-    //        // decode
-    //        DummyDecoder decoder = new DummyDecoder();
-    //        decoder.dummyDecode(session, (IoBuffer) writtenResult, new DummyOutput());
-    //        assertTrue(((WSMessage) writtenResult).getMessageType() == MessageType.PING);
-    //        assertEquals("Hello", ((WSMessage) writtenResult).getMessageAsString());
-    //        log.info("testUnmaskedPingRoundTrip exit");
-    //    }
+    @Test
+    public void testUnmaskedPingRoundTrip() throws Throwable {
+        log.info("testUnmaskedPingRoundTrip enter");
+        // create session and conn
+        DummySession session = new DummySession();
+        WebSocketConnection conn = new WebSocketConnection(session);
+        session.setAttribute(Constants.CONNECTION, conn);
+        // encode
+        DummyEncoder encoder = new DummyEncoder();
+        encoder.dummyEncode(session, Packet.build("Hello".getBytes(), MessageType.PING), new DummyOutput());
+        // decode
+        DummyDecoder decoder = new DummyDecoder();
+        decoder.dummyDecode(session, (IoBuffer) writtenResult, new DummyOutput());
+        assertTrue(((WSMessage) writtenResult).getMessageType() == MessageType.PING);
+        assertEquals("Hello", ((WSMessage) writtenResult).getMessageAsString());
+        log.info("testUnmaskedPingRoundTrip exit");
+    }
 
     @Test
     public void testUriWithParams() throws Throwable {
@@ -302,7 +319,7 @@ public class WebSocketServerTest {
                 log.debug("Server thread run");
                 try {
                     WSServer.main(null);
-                } catch (Exception e) {
+                } catch (IOException e) {
                     log.error("Error in server thread", e);
                 }
                 log.debug("Server thread exit");
@@ -356,14 +373,14 @@ public class WebSocketServerTest {
         boolean failed;
 
         public Object call() throws Exception {
-            //            WSClient client = new WSClient("localhost", 8888);
-            //            //WSClient client = new WSClient("localhost", 8888, 8192 * 10);
-            //            client.connect();
-            //            if (client.isConnected()) {
-            //                client.send("This is a test: " + System.currentTimeMillis());
-            //            } else {
-            //                failed = true;
-            //            }
+            WSClient client = new WSClient("localhost", 8888);
+            //WSClient client = new WSClient("localhost", 8888, 8192 * 10);
+            client.connect();
+            if (client.isConnected()) {
+                client.send("This is a test: " + System.currentTimeMillis());
+            } else {
+                failed = true;
+            }
             return failed;
         }
 
@@ -371,16 +388,12 @@ public class WebSocketServerTest {
 
     public static class WSServer {
 
-        private static EmbeddedTomcat tomcat;
+        private static NioSocketAcceptor acceptor;
 
         private static boolean listening;
 
         public static void stop() {
-            try {
-                tomcat.stop();
-            } catch (LifecycleException e) {
-                e.printStackTrace();
-            }
+            acceptor.unbind();
             listening = false;
         }
 
@@ -388,14 +401,21 @@ public class WebSocketServerTest {
             return listening;
         }
 
-        public static void main(String[] args) throws IOException, LifecycleException {
-
+        public static void main(String[] args) throws IOException {
+            acceptor = new NioSocketAcceptor();
+            acceptor.getFilterChain().addLast("protocol", new ProtocolCodecFilter(new WebSocketCodecFactory()));
+            // close sessions when the acceptor is stopped
+            acceptor.setCloseOnDeactivation(true);
+            acceptor.setHandler(new WebSocketHandler());
+            SocketSessionConfig sessionConf = acceptor.getSessionConfig();
+            sessionConf.setReuseAddress(true);
+            acceptor.setReuseAddress(true);
             // loop through the addresses and bind
             Set<InetSocketAddress> socketAddresses = new HashSet<InetSocketAddress>();
             socketAddresses.add(new InetSocketAddress("0.0.0.0", 8888));
             //socketAddresses.add(new InetSocketAddress("localhost", 8888));
             log.debug("Binding to {}", socketAddresses.toString());
-            tomcat.start();
+            acceptor.bind(socketAddresses);
             System.out.println("WS server started listening");
             listening = true;
             while (true) {
@@ -405,6 +425,114 @@ public class WebSocketServerTest {
                     System.out.println("WS server stopped listening");
                 }
             }
+        }
+
+    }
+
+    public class WSClient extends IoHandlerAdapter {
+
+        private String host;
+
+        private int port;
+
+        private SocketConnector connector;
+
+        private IoSession session;
+
+        private String cookie = null;
+
+        public WSClient(String host, int port) {
+            this.host = host;
+            this.port = port;
+            connector = new NioSocketConnector();
+            connector.getFilterChain().addLast("codec", new ProtocolCodecFilter(new WebSocketCodecFactory()));
+            connector.setHandler(this);
+            SocketSessionConfig sessionConf = connector.getSessionConfig();
+            sessionConf.setReuseAddress(true);
+            connector.setConnectTimeout(3);
+        }
+
+        public WSClient(String host, int port, int cookieLength) {
+            this.cookie = RandomStringUtils.randomAscii(cookieLength);
+            log.debug("Cookie length: {}", cookie.length());
+            this.host = host;
+            this.port = port;
+            connector = new NioSocketConnector();
+            connector.getFilterChain().addLast("codec", new ProtocolCodecFilter(new WebSocketCodecFactory()));
+            connector.setHandler(this);
+            SocketSessionConfig sessionConf = connector.getSessionConfig();
+            sessionConf.setReuseAddress(true);
+            connector.setConnectTimeout(3);
+        }
+
+        public void connect() {
+            try {
+                ConnectFuture future = connector.connect(new InetSocketAddress(host, port));
+                future.awaitUninterruptibly();
+                session = future.getSession();
+                // write the handshake
+                IoBuffer buf = IoBuffer.allocate(308);
+                buf.setAutoExpand(true);
+                buf.put("GET /default?encoding=text HTTP/1.1".getBytes());
+                buf.put(Constants.CRLF);
+                buf.put("Upgrade: websocket".getBytes());
+                buf.put(Constants.CRLF);
+                buf.put("Connection: Upgrade".getBytes());
+                buf.put(Constants.CRLF);
+                buf.put(String.format("%s: http://%s:%d", Constants.HTTP_HEADER_ORIGIN, host, port).getBytes());
+                buf.put(Constants.CRLF);
+                buf.put(String.format("%s: %s:%d", Constants.HTTP_HEADER_HOST, host, port).getBytes());
+                buf.put(Constants.CRLF);
+                buf.put(String.format("%s: dGhlIHNhbXBsZSBub25jZQ==", Constants.WS_HEADER_KEY).getBytes());
+                buf.put(Constants.CRLF);
+                buf.put("Sec-WebSocket-Version: 13".getBytes());
+                buf.put(Constants.CRLF);
+                if (cookie != null) {
+                    buf.put(String.format("Cookie: monster=%s", cookie).getBytes());
+                    buf.put(Constants.CRLF);
+                }
+                buf.put(Constants.CRLF);
+                if (log.isDebugEnabled()) {
+                    log.debug("Handshake request length: {}", buf.limit());
+                }
+                HandshakeRequest request = new HandshakeRequest(buf);
+                session.write(request);
+                // create connection 
+                WebSocketConnection conn = new WebSocketConnection(session);
+                conn.setType(ConnectionType.WEB);
+                conn.setConnected();
+                // add connection to client side session
+                session.setAttribute(Constants.CONNECTION, conn);
+            } catch (Exception e) {
+                log.error("Connection error", e);
+            }
+        }
+
+        public void send(String text) {
+            if (session != null) {
+                session.write(Packet.build(text.getBytes(), MessageType.TEXT));
+            }
+        }
+
+        public void ping() {
+            if (session != null) {
+                session.write(Packet.build("PINGING".getBytes(), MessageType.PING));
+            }
+        }
+
+        @Override
+        public void messageReceived(IoSession session, Object message) throws Exception {
+            WSMessage msg = (WSMessage) message;
+            System.out.println("Received: " + msg);
+        }
+
+        @Override
+        public void exceptionCaught(IoSession session, Throwable cause) throws Exception {
+            log.error("exception", cause);
+        }
+
+        public boolean isConnected() {
+            return session != null;
         }
 
     }
@@ -502,7 +630,18 @@ public class WebSocketServerTest {
 
     }
 
-    @SuppressWarnings("unused")
+    private class DummyDecoder extends WebSocketDecoder {
+        public boolean dummyDecode(IoSession session, IoBuffer in, ProtocolDecoderOutput out) throws Exception {
+            return super.doDecode(session, in, out);
+        }
+    }
+
+    private class DummyEncoder extends WebSocketEncoder {
+        public void dummyEncode(IoSession session, Object message, ProtocolEncoderOutput out) throws Exception {
+            super.encode(session, message, out);
+        }
+    }
+
     private class DummyOutput implements ProtocolDecoderOutput, ProtocolEncoderOutput {
 
         @Override
@@ -526,17 +665,433 @@ public class WebSocketServerTest {
 
     }
 
-    private class DummySession extends WsSession {
+    private class DummySession implements IoSession {
 
-        //localEndpoint, wsRemoteEndpoint, wsWebSocketContainer, requestUri, requestParameterMap, queryString, userPrincipal, httpSessionId, negotiatedExtensions, subProtocol, pathParameters, secure, endpointConfig;
-
-        public DummySession() throws DeploymentException {
-            this(null, null, null, null, null, null, null, RandomStringUtils.randomAlphanumeric(8), null, null, null, false, null);
+        @Override
+        public CloseFuture closeNow() {
+            // TODO Auto-generated method stub
+            return null;
         }
 
-        public DummySession(Endpoint localEndpoint, WsRemoteEndpointImplBase wsRemoteEndpoint, WsWebSocketContainer wsWebSocketContainer, URI requestUri, Map<String, List<String>> requestParameterMap, String queryString, Principal userPrincipal, String httpSessionId, List<Extension> negotiatedExtensions, String subProtocol, Map<String, String> pathParameters, boolean secure, EndpointConfig endpointConfig)
-                throws DeploymentException {
-            super(localEndpoint, wsRemoteEndpoint, wsWebSocketContainer, requestUri, requestParameterMap, queryString, userPrincipal, httpSessionId, negotiatedExtensions, subProtocol, pathParameters, secure, endpointConfig);
+        @Override
+        public CloseFuture closeOnFlush() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public boolean isActive() {
+            // TODO Auto-generated method stub
+            return false;
+        }
+
+        Map<Object, Object> attr = new HashMap<Object, Object>();
+
+        @Override
+        public long getId() {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public IoService getService() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public IoHandler getHandler() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public IoSessionConfig getConfig() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public IoFilterChain getFilterChain() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public WriteRequestQueue getWriteRequestQueue() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public TransportMetadata getTransportMetadata() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public ReadFuture read() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public WriteFuture write(Object message) {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public WriteFuture write(Object message, SocketAddress destination) {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public CloseFuture close(boolean immediately) {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        @Deprecated
+        public CloseFuture close() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        @Deprecated
+        public Object getAttachment() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        @Deprecated
+        public Object setAttachment(Object attachment) {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public Object getAttribute(Object key) {
+            return attr.get(key);
+        }
+
+        @Override
+        public Object getAttribute(Object key, Object defaultValue) {
+            return attr.get(key);
+        }
+
+        @Override
+        public Object setAttribute(Object key, Object value) {
+            attr.put(key, value);
+            return attr.get(key);
+        }
+
+        @Override
+        public Object setAttribute(Object key) {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public Object setAttributeIfAbsent(Object key, Object value) {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public Object setAttributeIfAbsent(Object key) {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public Object removeAttribute(Object key) {
+            return attr.remove(key);
+        }
+
+        @Override
+        public boolean removeAttribute(Object key, Object value) {
+            return attr.remove(key) != null;
+        }
+
+        @Override
+        public boolean replaceAttribute(Object key, Object oldValue, Object newValue) {
+            // TODO Auto-generated method stub
+            return false;
+        }
+
+        @Override
+        public boolean containsAttribute(Object key) {
+            // TODO Auto-generated method stub
+            return false;
+        }
+
+        @Override
+        public Set<Object> getAttributeKeys() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public boolean isConnected() {
+            // TODO Auto-generated method stub
+            return false;
+        }
+
+        @Override
+        public boolean isClosing() {
+            // TODO Auto-generated method stub
+            return false;
+        }
+
+        @Override
+        public CloseFuture getCloseFuture() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public SocketAddress getRemoteAddress() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public SocketAddress getLocalAddress() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public SocketAddress getServiceAddress() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public void setCurrentWriteRequest(WriteRequest currentWriteRequest) {
+            // TODO Auto-generated method stub
+
+        }
+
+        @Override
+        public void suspendRead() {
+            // TODO Auto-generated method stub
+
+        }
+
+        @Override
+        public void suspendWrite() {
+            // TODO Auto-generated method stub
+
+        }
+
+        @Override
+        public void resumeRead() {
+            // TODO Auto-generated method stub
+
+        }
+
+        @Override
+        public void resumeWrite() {
+            // TODO Auto-generated method stub
+
+        }
+
+        @Override
+        public boolean isReadSuspended() {
+            // TODO Auto-generated method stub
+            return false;
+        }
+
+        @Override
+        public boolean isWriteSuspended() {
+            // TODO Auto-generated method stub
+            return false;
+        }
+
+        @Override
+        public void updateThroughput(long currentTime, boolean force) {
+            // TODO Auto-generated method stub
+
+        }
+
+        @Override
+        public long getReadBytes() {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public long getWrittenBytes() {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public long getReadMessages() {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public long getWrittenMessages() {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public double getReadBytesThroughput() {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public double getWrittenBytesThroughput() {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public double getReadMessagesThroughput() {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public double getWrittenMessagesThroughput() {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public int getScheduledWriteMessages() {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public long getScheduledWriteBytes() {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public Object getCurrentWriteMessage() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public WriteRequest getCurrentWriteRequest() {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public long getCreationTime() {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public long getLastIoTime() {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public long getLastReadTime() {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public long getLastWriteTime() {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public boolean isIdle(IdleStatus status) {
+            // TODO Auto-generated method stub
+            return false;
+        }
+
+        @Override
+        public boolean isReaderIdle() {
+            // TODO Auto-generated method stub
+            return false;
+        }
+
+        @Override
+        public boolean isWriterIdle() {
+            // TODO Auto-generated method stub
+            return false;
+        }
+
+        @Override
+        public boolean isBothIdle() {
+            // TODO Auto-generated method stub
+            return false;
+        }
+
+        @Override
+        public int getIdleCount(IdleStatus status) {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public int getReaderIdleCount() {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public int getWriterIdleCount() {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public int getBothIdleCount() {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public long getLastIdleTime(IdleStatus status) {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public long getLastReaderIdleTime() {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public long getLastWriterIdleTime() {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public long getLastBothIdleTime() {
+            // TODO Auto-generated method stub
+            return 0;
+        }
+
+        @Override
+        public boolean isSecured() {
+            // TODO Auto-generated method stub
+            return false;
         }
 
     }
