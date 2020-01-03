@@ -14,18 +14,18 @@ import org.red5.server.api.scope.IScope;
  * @author Dan Rossi
  */
 public class BWApplication extends MultiThreadedApplicationAdapter {
-	@Override
-	public boolean appStart(IScope app) {
-		registerStreamPublishSecurity(new PublishSecurity());
-		registerSharedObjectSecurity(new SharedObjectSecurity());
-		registerStreamPlaybackSecurity(new PlaybackSecurity());
+    @Override
+    public boolean appStart(IScope app) {
+        registerStreamPublishSecurity(new PublishSecurity());
+        registerSharedObjectSecurity(new SharedObjectSecurity());
+        registerStreamPlaybackSecurity(new PlaybackSecurity());
 
-		return super.appStart(app);
-	}
+        return super.appStart(app);
+    }
 
-	@Override
-	public boolean appConnect(IConnection conn, Object[] params) {
+    @Override
+    public boolean appConnect(IConnection conn, Object[] params) {
 
-		return super.appConnect(conn, params);
-	}
+        return super.appConnect(conn, params);
+    }
 }

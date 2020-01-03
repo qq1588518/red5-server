@@ -9,10 +9,9 @@ import org.red5.server.api.stream.IStreamPlaybackSecurity;
  * @author Dan Rossi
  */
 public class PlaybackSecurity implements IStreamPlaybackSecurity {
-	
-	public boolean isPlaybackAllowed(IScope scope, String name, int start, int length, boolean flushPlaylist) {
-		return false;
-	}
-  
-}
 
+    public boolean isPlaybackAllowed(IScope scope, String name, int start, int length, boolean flushPlaylist) {
+        return false;
+    }
+
+}

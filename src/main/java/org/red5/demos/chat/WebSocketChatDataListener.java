@@ -45,7 +45,8 @@ public class WebSocketChatDataListener extends WebSocketDataListener {
     @Override
     public void onWSConnect(WebSocketConnection conn) {
         log.info("Connect: {}", conn);
-        Optional<List<String>> header = Optional.ofNullable(conn.getHeaders().get(WSConstants.WS_HEADER_PROTOCOL));
+        List<String> stringList = (List<String>)conn.getHeaders().get(WSConstants.WS_HEADER_PROTOCOL);
+        Optional<List<String>> header = Optional.ofNullable(stringList);
         if (header.isPresent()) {
             log.debug("Protocol header exists");
             String protocol = header.get().get(0);

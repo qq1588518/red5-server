@@ -8,7 +8,7 @@ import org.red5.server.api.IConnection;
  * @author Dan Rossi
  */
 public interface IBandwidthDetection {
-	public void checkBandwidth(IConnection p_client);
+    public void checkBandwidth(IConnection p_client);
 
-	public void calculateClientBw(IConnection p_client);
+    public void calculateClientBw(IConnection p_client);
 }

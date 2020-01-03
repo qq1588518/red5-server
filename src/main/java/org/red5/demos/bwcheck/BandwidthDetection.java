@@ -14,22 +14,21 @@ import org.slf4j.LoggerFactory;
  */
 public class BandwidthDetection {
 
-	protected static Logger log = LoggerFactory
-			.getLogger(BandwidthDetection.class);
+    protected static Logger log = LoggerFactory.getLogger(BandwidthDetection.class);
 
-	public BandwidthDetection() {
+    public BandwidthDetection() {
 
-	}
+    }
 
-	public Map<String, Object> onClientBWCheck(Object[] params) {
-		ClientServerDetection clientServer = new ClientServerDetection();
-		return clientServer.onClientBWCheck(params);
-	}
+    public Map<String, Object> onClientBWCheck(Object[] params) {
+        ClientServerDetection clientServer = new ClientServerDetection();
+        return clientServer.onClientBWCheck(params);
+    }
 
-	public void onServerClientBWCheck(Object[] params) {
-		IConnection conn = Red5.getConnectionLocal();
-		ServerClientDetection serverClient = new ServerClientDetection();
-		serverClient.checkBandwidth(conn);
-	}
+    public void onServerClientBWCheck(Object[] params) {
+        IConnection conn = Red5.getConnectionLocal();
+        ServerClientDetection serverClient = new ServerClientDetection();
+        serverClient.checkBandwidth(conn);
+    }
 
 }

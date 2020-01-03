@@ -85,6 +85,11 @@
     <orderEntry type="library" name="Maven: org.mp4parser:isoparser:1.9.39" level="project" />
     <orderEntry type="library" name="Maven: xuggle:xuggle-xuggler:5.4" level="project" />
     <orderEntry type="library" name="Maven: xuggle:xuggle-utils:1.22" level="project" />
+    <orderEntry type="library" name="Maven: net.minidev:json-smart:2.0-RC3" level="project" />
+    <orderEntry type="library" name="Maven: net.minidev:asm:1.0-RC3" level="project" />
+    <orderEntry type="library" name="Maven: asm:asm:3.3.1" level="project" />
+    <orderEntry type="library" name="Maven: net.java.dev.jets3t:jets3t:0.9.0" level="project" />
+    <orderEntry type="library" name="Maven: com.jamesmurty.utils:java-xmlbuilder:0.4" level="project" />
     <orderEntry type="library" name="Maven: org.apache.mina:mina-core:2.0.21" level="project" />
     <orderEntry type="library" scope="PROVIDED" name="Maven: org.apache.tomcat:tomcat-servlet-api:8.5.45" level="project" />
     <orderEntry type="library" scope="PROVIDED" name="Maven: org.red5:tomcatplugin:2.2.2" level="project" />

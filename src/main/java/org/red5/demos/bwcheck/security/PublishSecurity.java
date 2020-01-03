@@ -9,9 +9,9 @@ import org.red5.server.api.stream.IStreamPublishSecurity;
  * @author Dan Rossi
  */
 public class PublishSecurity implements IStreamPublishSecurity {
-    
-	public boolean isPublishAllowed(IScope scope, String name, String mode) {
-		return false;
+
+    public boolean isPublishAllowed(IScope scope, String name, String mode) {
+        return false;
     }
-    
+
 }
